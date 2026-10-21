@@ -5,11 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>M 시공+</title>
 
-  <!-- 💡 [PWA 설정 추가] 상단 주소창을 없애고 앱처럼 실행되게 만드는 코드 -->
+  <!-- 💡 [PWA 설정] 상단 주소창을 없애고 앱처럼 실행되게 만드는 코드 -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="M 시공+">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#1a73e8">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 
   <style>
     html, body {
@@ -30,6 +34,75 @@
 </head>
 <body>
   <!-- src 속성 안에 기존 구글 앱스크립트 웹 앱 URL을 넣으세요 -->
-  <iframe src="https://script.google.com/macros/s/AKfycbyBqbF0pAv5NUBmA48J1I4FUUH_oIlYqZ2WE5kFeM7YrHYwuu09hA2sSHHvUbi4EYDPSg/exec"></iframe>
+  <iframe id="app" src="https://script.google.com/macros/s/AKfycbyBqbF0pAv5NUBmA48J1I4FUUH_oIlYqZ2WE5kFeM7YrHYwuu09hA2sSHHvUbi4EYDPSg/exec"></iframe>
+
+  <script>
+    // ============================================================
+    // 앱 설치(홈 화면에 추가) 지원
+    // ============================================================
+    // 구글 앱스크립트 화면(위 iframe)은 매니페스트/서비스워커를 둘 수 없어서, 이 감싸기 페이지가 PWA 설치를 맡는다.
+    // 안쪽 화면의 "앱으로 설치" 아이콘이 이 페이지와 메시지를 주고받는다:
+    //   화면 -> 여기: { type: 'M_PWA_QUERY' } (상태 물어봄) / { type: 'M_PWA_INSTALL' } (설치 창 띄워 달라고 요청)
+    //   여기 -> 화면: { type: 'M_PWA_STATE', installed, canPrompt, ios }
+    // 설치 창은 브라우저가 사용자의 터치 직후에만 띄울 수 있어서, 안쪽 화면의 버튼을 눌렀을 때 요청이 오면 그 자리에서 띄운다.
+
+    // 서비스워커: 크롬이 "설치 가능"으로 판단하는 조건(fetch 핸들러가 있는 서비스워커)을 채우기 위한 최소한의 것(캐시는 하지 않음).
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(function () {});
+    }
+
+    var deferredPrompt = null;        // 브라우저가 "설치할 수 있음"이라고 알려줄 때 받아 두는 이벤트
+    var installedNow = false;         // 이번 방문 중 설치를 마친 경우
+    var knownSources = [];            // 메시지를 보낸 안쪽 화면(창)들 - 상태가 바뀌면 여기로 다시 알려준다
+
+    function isStandalone() {
+      try { return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true; } catch (e) { return false; }
+    }
+    function isIOS() {
+      var ua = navigator.userAgent || '';
+      return /iphone|ipad|ipod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    }
+    function currentState() {
+      return { type: 'M_PWA_STATE', installed: installedNow || isStandalone(), canPrompt: !!deferredPrompt, ios: isIOS() };
+    }
+    function broadcast() {
+      var msg = currentState();
+      for (var i = 0; i < knownSources.length; i++) {
+        try { knownSources[i].postMessage(msg, '*'); } catch (e) {}
+      }
+    }
+
+    window.addEventListener('beforeinstallprompt', function (e) {
+      e.preventDefault();             // 브라우저 기본 설치 배너 대신 안쪽 화면의 아이콘으로 설치하게 한다
+      deferredPrompt = e;
+      broadcast();
+    });
+    window.addEventListener('appinstalled', function () {
+      deferredPrompt = null;
+      installedNow = true;
+      broadcast();
+    });
+
+    window.addEventListener('message', function (ev) {
+      // 구글 앱스크립트 화면(script.google.com / *.googleusercontent.com)에서 온 메시지만 받는다.
+      if (!/^https:\/\/([a-z0-9-]+\.)*(googleusercontent\.com|google\.com)$/i.test(ev.origin)) return;
+      var d = ev.data;
+      if (!d || typeof d !== 'object') return;
+      if (d.type !== 'M_PWA_QUERY' && d.type !== 'M_PWA_INSTALL') return;
+
+      if (knownSources.indexOf(ev.source) === -1) knownSources.push(ev.source);
+
+      if (d.type === 'M_PWA_INSTALL' && deferredPrompt) {
+        var p = deferredPrompt;
+        deferredPrompt = null;        // 설치 창 이벤트는 한 번만 쓸 수 있다
+        try {
+          p.prompt();
+          p.userChoice.then(function () { broadcast(); }, function () { broadcast(); });
+        } catch (e) { broadcast(); }
+        return;
+      }
+      try { ev.source.postMessage(currentState(), '*'); } catch (e) {}
+    });
+  </script>
 </body>
 </html>
