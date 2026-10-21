@@ -1,13 +1,13 @@
 {
-  "name": "M 시공+",
-  "short_name": "M 시공+",
+  "name": "M 시공+ GAS",
+  "short_name": "M+ GAS",
   "description": "시공팀 명세표·근무실적·하자내역·참고서 검색",
   "id": "./",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "background_color": "#f8f9fa",
-  "theme_color": "#1a73e8",
+  "theme_color": "#e8710a",
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
